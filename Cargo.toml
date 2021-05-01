@@ -1,0 +1,18 @@
+[package]
+name = "rgbnode-rs"
+version = "0.1.0"
+authors = ["transistor <trans@jabberwocky.ca>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+cortex-m = "0.6"
+cortex-m-rt = "0.6"
+cortex-m-semihosting = "0.3"
+panic-semihosting = "0.5"
+stm32f1xx-hal = { version = "0.5", features = ["stm32f103", "stm32-usbd", "rt"] }
+usb-device = "0.2"
+usbd-serial = "0.1"
+embedded-hal = "0.2"
+
