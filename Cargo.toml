@@ -16,4 +16,5 @@ usb-device = "0.2"
 usbd-serial = "0.1"
 embedded-hal = "0.2"
 lexical-core = { version = "0.7.6", default-features=false, features = [ "libm" ] }
+oorandom = "11"
 

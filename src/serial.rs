@@ -35,11 +35,8 @@ impl<'a> SerialDevice<'a> {
 
         match self.serial.read(&mut buf) {
             Ok(count) if count > 0 => {
-                for c in buf[0..count].iter() {
-                    input.push(*c);
-                    if *c == '\n' as u8 {
-                        return true;
-                    }
+                if input.push_data(&buf[0..count]) {
+                    return true;
                 }
             },
             Ok(_) | Err(UsbError::WouldBlock) => { },
@@ -59,6 +56,7 @@ impl<'a> SerialDevice<'a> {
 }
 
 pub struct InputLine {
+    pub term: usize,
     pub length: usize,
     pub data: [u8; 128]
 }
@@ -66,22 +64,47 @@ pub struct InputLine {
 impl InputLine {
     pub fn new() -> InputLine {
         InputLine {
+            term: 0,
             length: 0,
             data: [0u8; 128]
         }
     }
 
-    pub fn push(&mut self, ch: u8) {
-        self.data[self.length] = ch;
-        self.length += 1;
+    pub fn push_data(&mut self, s: &[u8]) -> bool {
+        let start = self.length;
+
+        for ch in s {
+            self.data[self.length] = *ch;
+            self.length += 1;
+        }
+
+        for i in start..self.length {
+            if self.data[i] == '\n' as u8 {
+                self.term = i + 1;
+                return true;
+            }
+        }
+
+        return false;
     }
 
     pub fn clear(&mut self) {
+        self.term = 0;
         self.length = 0;
     }
 
+    pub fn discard(&mut self) {
+        let diff = self.length - self.term;
+        for i in 0..diff {
+            self.data[i] = self.data[self.term + i];
+        }
+
+        self.length = diff;
+        self.term = 0;
+    }
+
     pub fn to_str(&self) -> Result<&str, core::str::Utf8Error> {
-        core::str::from_utf8(&self.data)
+        core::str::from_utf8(&self.data[0..self.term])
     }
 }
 

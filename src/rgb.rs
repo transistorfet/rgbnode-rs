@@ -1,5 +1,5 @@
 
-use cortex_m_semihosting::{ hprintln };
+use oorandom::Rand32;
 
 use stm32f1xx_hal::{
     prelude::*,
@@ -173,9 +173,11 @@ pub struct RgbEngine {
     enabled: bool,
     intensity: u8,
     delay: u32,
+    index: usize,
     output: Colour,
     mode: RgbMode,
     frame: Frame,
+    rand: Rand32,
 }
 
 impl RgbEngine {
@@ -184,9 +186,11 @@ impl RgbEngine {
             enabled: false,
             intensity: 255,
             delay: 5000,
+            index: COLOUR_CYCLE_MAX - 1,
             output: Colour::new(0xff, 0xff, 0xff),
             mode: RgbMode::Swirl(false, 0, false),
             frame: Frame::Stop,
+            rand: Rand32::new(millis() as u64),
         }
     }
 
@@ -225,6 +229,29 @@ impl RgbEngine {
             self.delay = update;
         }
         self.delay
+    }
+
+    pub fn index(&mut self, update: Option<usize>) -> usize {
+        if let Some(update) = update {
+            self.index = update;
+        }
+        self.index
+    }
+
+    pub fn index_up(&mut self) {
+        self.index = (self.index + 1) % COLOUR_INDEX.len();
+    }
+
+    pub fn index_down(&mut self) {
+        if self.index == 0 {
+            self.index = COLOUR_INDEX.len() - 1;
+        } else {
+            self.index -= 1;
+        }
+    }
+
+    pub fn get_colour(&self) -> Colour {
+        self.output
     }
 
     pub fn set_colour(&mut self, colour: Colour) {
@@ -286,7 +313,7 @@ impl RgbEngine {
                 Frame::Hold(HoldFrame { start: millis(), time: 1000 })
             },
             RgbMode::Cycle(ref mut index) => {
-                advance_colour_index(index);
+                advance_colour_index(index, COLOUR_CYCLE_MAX);
                 self.output = COLOUR_INDEX[*index];
 
                 Frame::Hold(HoldFrame { start: millis(), time: self.delay })
@@ -297,8 +324,13 @@ impl RgbEngine {
                 if !*hold {
                     Frame::Hold(HoldFrame { start: millis(), time: self.delay })
                 } else {
-                    // TODO add random
-                    advance_colour_index(index);
+                    if *random {
+                        let r = self.rand.rand_u32() as usize;
+                        *index = r % COLOUR_CYCLE_MAX;
+                    } else {
+                        advance_colour_index(index, COLOUR_CYCLE_MAX);
+                    }
+
                     let next = COLOUR_INDEX[*index];
                     Frame::new_fade(self.output, next, self.delay * 2)
                 }
@@ -310,8 +342,12 @@ impl RgbEngine {
                     self.output = Colour::new(0, 0, 0);
                     Frame::Hold(HoldFrame { start: millis(), time: self.delay })
                 } else {
-                    // TODO add random
-                    self.output = COLOUR_INDEX[0];
+                    if *random {
+                        let r = self.rand.rand_u32() as usize;
+                        self.index = r % COLOUR_CYCLE_MAX;
+                    }
+
+                    self.output = COLOUR_INDEX[self.index];
                     Frame::Hold(HoldFrame { start: millis(), time: 70 })
                 }
             },
@@ -321,9 +357,9 @@ impl RgbEngine {
 
 }
 
-fn advance_colour_index(index: &mut usize) {
+fn advance_colour_index(index: &mut usize, max: usize) {
     *index += 1;
-    if *index >= COLOUR_INDEX.len() {
+    if *index >= max {
         *index = 0;
     }
 }
@@ -342,13 +378,43 @@ impl Colour {
     }
 }
 
+// This is the highest colour index that will be used for cycle patterns
+const COLOUR_CYCLE_MAX: usize = 25;
+
 const COLOUR_INDEX: &[Colour] = &[
-    Colour { r: 0xff, g: 0xff, b: 0xff },
-    Colour { r: 0xff, g: 0,    b: 0 },
-    Colour { r: 0,    g: 0xff, b: 0 },
-    Colour { r: 0,    g: 0,    b: 0xff },
-    Colour { r: 0,    g: 0xff, b: 0xff },
-    Colour { r: 0xff, g: 0,    b: 0xff },
-    Colour { r: 0xff, g: 0xff, b: 0 },
+    // NOTE these were ported from RGBNode, which doesn't adjust the PWM output for non-linearity, so the colours might not be what's expected
+    Colour { r: 255, g:   0, b:   0 },
+    Colour { r: 255, g:  32, b:   0 },
+    Colour { r: 255, g:  64, b:   0 },
+    Colour { r: 255, g: 128, b:   0 },
+    Colour { r: 255, g: 255, b:   0 },
+    Colour { r: 128, g: 255, b:   0 },
+    Colour { r:  64, g: 255, b:   0 },
+    Colour { r:  32, g: 255, b:   0 },
+
+    Colour { r:   0, g: 255, b:   0 },
+    Colour { r:   0, g: 255, b:  32 },
+    Colour { r:   0, g: 255, b:  64 },
+    Colour { r:   0, g: 255, b: 128 },
+    Colour { r:   0, g: 255, b: 255 },
+    Colour { r:   0, g: 128, b: 255 },
+    Colour { r:   0, g:  64, b: 255 },
+    Colour { r:   0, g:  32, b: 255 },
+
+    Colour { r:   0, g:   0, b: 255 },
+    Colour { r:  32, g:   0, b: 255 },
+    Colour { r:  64, g:   0, b: 255 },
+    Colour { r: 128, g:   0, b: 255 },
+    Colour { r: 255, g:   0, b: 255 },
+    Colour { r: 255, g:   0, b: 128 },
+    Colour { r: 255, g:   0, b:  64 },
+    Colour { r: 255, g:   0, b:  32 },
+
+    Colour { r: 255, g: 255, b: 255 },
+    Colour { r: 255, g: 255, b: 128 },
+    Colour { r: 255, g: 255, b:  64 },
+    Colour { r: 255, g: 192, b:   0 },
+    Colour { r:  16, g: 255, b:   0 },
+    Colour { r:   0, g:  80, b: 255 }
 ];
 

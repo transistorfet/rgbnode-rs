@@ -14,7 +14,7 @@ use stm32f1xx_hal::{
     stm32,
     prelude::*,
     time::U32Ext,
-    timer::{ Event, Timer, Tim2NoRemap },
+    timer::{ Timer, Tim2NoRemap },
     usb::{ Peripheral, UsbBus },
 };
 
@@ -23,7 +23,7 @@ mod rgb;
 mod node;
 mod serial;
 
-use rgb::{ Stm32Rgb, RgbEngine };
+use rgb::{ Stm32Rgb };
 use node::{ RgbNode };
 use serial::{ SerialDevice, InputLine };
 
@@ -112,11 +112,7 @@ fn main() -> ! {
 
 
     // Create RgbNode object and run
-    let rgbnode = RgbNode {
-        rgb,
-        serial,
-        engine: RgbEngine::new(),
-    };
+    let rgbnode = RgbNode::new(rgb, serial);
 
     mainloop(rgbnode);
 }
