@@ -95,20 +95,22 @@ pub struct MillisPerNotch {
     pub b: i32,
 }
 
-pub enum Frame {
-    Stop,
-    Hold { start: u32, time: u32 },
-    Fade { increments: MillisPerNotch, target: Colour, last: u32, remain: u32 },
+pub struct HoldFrame {
+    pub start: u32,
+    pub time: u32,
 }
 
+pub struct FadeFrame {
+    pub increments: MillisPerNotch,
+    pub target: Colour,
+    pub last: u32,
+    pub remain: u32,
+}
 
-pub enum RgbMode {
-    Solid,
-    Cycle(usize),
-    Strobe,
-    RandomStrobe,
-    Swirl(usize),
-    RandomSwirl,
+pub enum Frame {
+    Stop,
+    Hold(HoldFrame),
+    Fade(FadeFrame),
 }
 
 impl Frame {
@@ -119,19 +121,30 @@ impl Frame {
             b: divide_or_zero!(delay as i32, target.b as i32 - current.b as i32),
         };
 
-        Frame::Fade {
+        Frame::Fade(FadeFrame {
             increments,
             target,
             last: millis(),
             remain: delay,
-        }
+        })
     }
+}
+
+
+pub enum RgbMode {
+    Solid,
+    Cycle(usize),
+    Strobe,
+    RandomStrobe,
+    Swirl(usize, bool),
+    RandomSwirl,
 }
 
 
 pub struct RgbEngine {
     enabled: bool,
     intensity: u8,
+    delay: u32,
     output: Colour,
     mode: RgbMode,
     frame: Frame,
@@ -142,8 +155,9 @@ impl RgbEngine {
         RgbEngine {
             enabled: false,
             intensity: 255,
+            delay: 5000,
             output: Colour::new(0xff, 0xff, 0xff),
-            mode: RgbMode::Swirl(0),
+            mode: RgbMode::Swirl(0, false),
             frame: Frame::Stop,
         }
     }
@@ -168,25 +182,25 @@ impl RgbEngine {
             Frame::Stop => {
                 self.frame = self.get_next_frame();
             },
-            Frame::Hold { start, time } => {
-                if (millis() - start) > time {
+            Frame::Hold(ref hold) => {
+                if (millis() - hold.start) > hold.time {
                     self.frame = Frame::Stop
                 }
             },
-            Frame::Fade { ref increments, ref target, ref mut last, ref mut remain } => {
+            Frame::Fade(ref mut fade) => {
                 let current = millis();
-                let diff = current - *last;
-                if diff < 20 { return; }
+                let diff = current - fade.last;
+                if diff < 40 { return; }
 
-                self.output.r = bounded!(self.output.r as i32 + divide_or_zero!(diff as i32, increments.r));
-                self.output.g = bounded!(self.output.g as i32 + divide_or_zero!(diff as i32, increments.g));
-                self.output.b = bounded!(self.output.b as i32 + divide_or_zero!(diff as i32, increments.b));
+                self.output.r = bounded!(self.output.r as i32 + divide_or_zero!(diff as i32, fade.increments.r));
+                self.output.g = bounded!(self.output.g as i32 + divide_or_zero!(diff as i32, fade.increments.g));
+                self.output.b = bounded!(self.output.b as i32 + divide_or_zero!(diff as i32, fade.increments.b));
 
-                if *remain > diff {
-                    *remain -= diff;
-                    *last = current;
+                if fade.remain > diff {
+                    fade.remain -= diff;
+                    fade.last = current;
                 } else {
-                    self.output = *target;
+                    self.output = fade.target;
                     self.frame = Frame::Stop;
                 }
             },
@@ -196,28 +210,35 @@ impl RgbEngine {
     fn get_next_frame(&mut self) -> Frame {
         match self.mode {
             RgbMode::Cycle(ref mut index) => {
-                *index += 1;
-                if *index >= COLOUR_INDEX.len() {
-                    *index = 0;
-                }
-
+                advance_colour_index(index);
                 self.output = COLOUR_INDEX[*index];
 
-                hprintln!("H: {}", index);
-                Frame::Hold { start: millis(), time: 3000 }
+                Frame::Hold(HoldFrame { start: millis(), time: self.delay })
             }
-            RgbMode::Swirl(ref mut index) => {
-                *index += 1;
-                if *index >= COLOUR_INDEX.len() {
-                    *index = 0;
+            RgbMode::Swirl(ref mut index, ref mut hold) => {
+                if *hold {
+                    *hold = !*hold;
+
+                    Frame::Hold(HoldFrame { start: millis(), time: self.delay })
+                } else {
+                    *hold = !*hold;
+                    advance_colour_index(index);
+                    let next = COLOUR_INDEX[*index];
+
+                    Frame::new_fade(self.output, next, 10000)
                 }
-
-                let next = COLOUR_INDEX[*index];
-
-                Frame::new_fade(self.output, next, 5000)
             }
-            _ => Frame::Hold { start: millis(), time: 5000 }
+            _ => Frame::Hold(HoldFrame { start: millis(), time: 1000 })
         }
+    }
+
+
+}
+
+fn advance_colour_index(index: &mut usize) {
+    *index += 1;
+    if *index >= COLOUR_INDEX.len() {
+        *index = 0;
     }
 }
 
