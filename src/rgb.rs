@@ -100,8 +100,13 @@ pub struct HoldFrame {
     pub time: u32,
 }
 
+pub struct FadeChannel {
+    pub millis_per_change: i32,
+    pub millis_countdown: i32,
+}
+
 pub struct FadeFrame {
-    pub increments: MillisPerNotch,
+    pub channels: [FadeChannel; 3],
     pub target: Colour,
     pub last: u32,
     pub remain: u32,
@@ -113,16 +118,41 @@ pub enum Frame {
     Fade(FadeFrame),
 }
 
+impl FadeChannel {
+    pub fn new(start: i32) -> Self {
+        FadeChannel {
+            millis_per_change: start,
+            millis_countdown: start.abs(),
+        }
+    }
+
+    pub fn adjust(&mut self, diff: i32, input: u8) -> u8 {
+        let mut output = input;
+
+        if self.millis_per_change != 0 {
+            self.millis_countdown -= diff;
+            if self.millis_countdown < 0 {
+                self.millis_countdown += self.millis_per_change.abs();
+
+                if self.millis_per_change >= 1 {
+                    output = bounded!(input as i32 + 1) as u8;
+                } else if self.millis_per_change <= 1 {
+                    output = bounded!(input as i32 - 1) as u8;
+                }
+            }
+        }
+        output
+    }
+}
+
 impl Frame {
     pub fn new_fade(current: Colour, target: Colour, delay: u32) -> Frame {
-        let increments = MillisPerNotch {
-            r: divide_or_zero!(delay as i32, target.r as i32 - current.r as i32),
-            g: divide_or_zero!(delay as i32, target.g as i32 - current.g as i32),
-            b: divide_or_zero!(delay as i32, target.b as i32 - current.b as i32),
-        };
-
         Frame::Fade(FadeFrame {
-            increments,
+            channels: [
+                FadeChannel::new(divide_or_zero!(delay as i32, target.r as i32 - current.r as i32)),
+                FadeChannel::new(divide_or_zero!(delay as i32, target.g as i32 - current.g as i32)),
+                FadeChannel::new(divide_or_zero!(delay as i32, target.b as i32 - current.b as i32)),
+            ],
             target,
             last: millis(),
             remain: delay,
@@ -190,11 +220,11 @@ impl RgbEngine {
             Frame::Fade(ref mut fade) => {
                 let current = millis();
                 let diff = current - fade.last;
-                if diff < 40 { return; }
+                if diff < 1 { return; }
 
-                self.output.r = bounded!(self.output.r as i32 + divide_or_zero!(diff as i32, fade.increments.r));
-                self.output.g = bounded!(self.output.g as i32 + divide_or_zero!(diff as i32, fade.increments.g));
-                self.output.b = bounded!(self.output.b as i32 + divide_or_zero!(diff as i32, fade.increments.b));
+                self.output.r = fade.channels[0].adjust(diff as i32, self.output.r);
+                self.output.g = fade.channels[1].adjust(diff as i32, self.output.g);
+                self.output.b = fade.channels[2].adjust(diff as i32, self.output.b);
 
                 if fade.remain > diff {
                     fade.remain -= diff;
@@ -225,7 +255,7 @@ impl RgbEngine {
                     advance_colour_index(index);
                     let next = COLOUR_INDEX[*index];
 
-                    Frame::new_fade(self.output, next, 10000)
+                    Frame::new_fade(self.output, next, self.delay * 2)
                 }
             }
             _ => Frame::Hold(HoldFrame { start: millis(), time: 1000 })
