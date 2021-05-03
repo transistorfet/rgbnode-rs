@@ -164,10 +164,8 @@ impl Frame {
 pub enum RgbMode {
     Solid,
     Cycle(usize),
-    Strobe,
-    RandomStrobe,
-    Swirl(usize, bool),
-    RandomSwirl,
+    Strobe(bool, bool),
+    Swirl(bool, usize, bool),
 }
 
 
@@ -187,17 +185,23 @@ impl RgbEngine {
             intensity: 255,
             delay: 5000,
             output: Colour::new(0xff, 0xff, 0xff),
-            mode: RgbMode::Swirl(0, false),
+            mode: RgbMode::Swirl(false, 0, false),
             frame: Frame::Stop,
         }
     }
 
-    pub fn toggle<D: RgbDevice>(&mut self, dev: &mut D) {
-        self.enabled = !self.enabled;
+    // Device Control Functions
+
+    pub fn power<D: RgbDevice>(&mut self, dev: &mut D, on: bool) {
+        self.enabled = on;
         match self.enabled {
             true => dev.enable(),
             false => dev.disable(),
         }
+    }
+
+    pub fn toggle<D: RgbDevice>(&mut self, dev: &mut D) {
+        self.power(dev, !self.enabled);
     }
 
     pub fn handle_animation<D: RgbDevice>(&mut self, dev: &mut D) {
@@ -206,6 +210,45 @@ impl RgbEngine {
             dev.set_colour(self.output.scale(self.intensity));
         }
     }
+
+    // Public Adjustment Functions
+
+    pub fn intensity(&mut self, update: Option<u8>) -> u8 {
+        if let Some(update) = update {
+            self.intensity = update;
+        }
+        self.intensity
+    }
+
+    pub fn delay(&mut self, update: Option<u32>) -> u32 {
+        if let Some(update) = update {
+            self.delay = update;
+        }
+        self.delay
+    }
+
+    pub fn set_colour(&mut self, colour: Colour) {
+        self.output = colour;
+    }
+
+    pub fn solid_mode(&mut self) {
+        self.mode = RgbMode::Solid;
+    }
+
+    pub fn cycle_mode(&mut self) {
+        self.mode = RgbMode::Cycle(0);
+    }
+
+    pub fn swirl_mode(&mut self, random: bool) {
+        self.mode = RgbMode::Swirl(random, 0, false);
+    }
+
+    pub fn strobe_mode(&mut self, random: bool) {
+        self.mode = RgbMode::Strobe(random, false);
+    }
+
+
+    // Private State Control Functions
 
     fn update_frame(&mut self) {
         match self.frame {
@@ -239,26 +282,39 @@ impl RgbEngine {
 
     fn get_next_frame(&mut self) -> Frame {
         match self.mode {
+            RgbMode::Solid => {
+                Frame::Hold(HoldFrame { start: millis(), time: 1000 })
+            },
             RgbMode::Cycle(ref mut index) => {
                 advance_colour_index(index);
                 self.output = COLOUR_INDEX[*index];
 
                 Frame::Hold(HoldFrame { start: millis(), time: self.delay })
-            }
-            RgbMode::Swirl(ref mut index, ref mut hold) => {
-                if *hold {
-                    *hold = !*hold;
+            },
+            RgbMode::Swirl(ref random, ref mut index, ref mut hold) => {
+                *hold = !*hold;
 
+                if !*hold {
                     Frame::Hold(HoldFrame { start: millis(), time: self.delay })
                 } else {
-                    *hold = !*hold;
+                    // TODO add random
                     advance_colour_index(index);
                     let next = COLOUR_INDEX[*index];
-
                     Frame::new_fade(self.output, next, self.delay * 2)
                 }
-            }
-            _ => Frame::Hold(HoldFrame { start: millis(), time: 1000 })
+            },
+            RgbMode::Strobe(ref random, ref mut hold) => {
+                *hold = !*hold;
+
+                if !*hold {
+                    self.output = Colour::new(0, 0, 0);
+                    Frame::Hold(HoldFrame { start: millis(), time: self.delay })
+                } else {
+                    // TODO add random
+                    self.output = COLOUR_INDEX[0];
+                    Frame::Hold(HoldFrame { start: millis(), time: 70 })
+                }
+            },
         }
     }
 
