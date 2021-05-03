@@ -6,6 +6,7 @@ use cortex_m_semihosting::{ hprintln };
 use crate::rgb::{ Stm32Rgb, RgbDevice, RgbEngine, Colour };
 use crate::serial::{ SerialDevice, InputLine };
 
+
 struct Command {
     pub name: &'static str,
     pub func: fn(&mut RgbNode, SplitWhitespace) -> (),
@@ -28,6 +29,7 @@ fn command_on(rgbnode: &mut RgbNode, mut args: SplitWhitespace) {
 fn command_off(rgbnode: &mut RgbNode, args: SplitWhitespace) {
     rgbnode.rgb.disable();
 }
+
 
 pub struct RgbNode<'a> {
     pub rgb: Stm32Rgb,
@@ -65,7 +67,7 @@ impl<'a> RgbNode<'a> {
     }
 
     pub fn handle_animation(&mut self) {
-        // TODO this would adjust colours based on animation/time conditions
+        self.engine.handle_animation(&mut self.rgb);
     }
 }
 

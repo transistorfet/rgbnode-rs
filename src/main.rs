@@ -4,7 +4,8 @@
 extern crate panic_semihosting;
 
 use cortex_m::asm::delay;
-use cortex_m_rt::entry;
+use cortex_m::peripheral::syst::SystClkSource;
+use cortex_m_rt::{ entry, exception };
 #[allow(unused_imports)]
 use cortex_m_semihosting::{ debug, hprintln };
 
@@ -13,7 +14,7 @@ use stm32f1xx_hal::{
     stm32,
     prelude::*,
     time::U32Ext,
-    timer::{ Tim2NoRemap, Timer },
+    timer::{ Event, Timer, Tim2NoRemap },
     usb::{ Peripheral, UsbBus },
 };
 
@@ -27,9 +28,21 @@ use node::{ RgbNode };
 use serial::{ SerialDevice, InputLine };
 
 
+static mut ELAPSED_MS: u32 = 0u32;
+
+#[exception]
+fn SysTick() {
+    unsafe { ELAPSED_MS += 1; }
+}
+
+fn millis() -> u32 {
+    return unsafe { ELAPSED_MS };
+}
+
 #[entry]
 fn main() -> ! {
     let dp = stm32::Peripherals::take().unwrap();
+    let cp = stm32::CorePeripherals::take().unwrap();
 
     let mut flash = dp.FLASH.constrain();
     let mut rcc = dp.RCC.constrain();
@@ -41,6 +54,16 @@ fn main() -> ! {
         .sysclk(48.mhz())
         .pclk1(24.mhz())
         .freeze(&mut flash.acr);
+
+
+    // Configure SysTick to generate a 1ms interrupt
+    let mut syst = cp.SYST;
+    syst.set_reload(48000);
+    syst.clear_current();
+    syst.set_clock_source(SystClkSource::Core);
+    syst.enable_counter();
+    syst.enable_interrupt();
+
 
     // Fetch the port devices we'll need
     let mut gpioa = dp.GPIOA.split(&mut rcc.apb2);
@@ -84,7 +107,7 @@ fn main() -> ! {
         channels,
         &mut afio.mapr,
         1.khz(),
-    );
+    ).split();
     let rgb = Stm32Rgb::new(pwm.0, pwm.1, pwm.2);
 
 
@@ -100,9 +123,26 @@ fn main() -> ! {
 
 fn mainloop(mut rgbnode: RgbNode) -> ! {
     let mut input = InputLine::new();
+
+    rgbnode.engine.toggle(&mut rgbnode.rgb);
     loop {
         rgbnode.process_input(&mut input);
         rgbnode.handle_animation();
     }
+
+    /*
+    let mut next_mil = millis();
+    let mut on = true;
+    rgbnode.rgb.red.enable();
+    loop {
+        let mil = millis();
+        if mil > next_mil {
+            on = !on;
+            if on { rgbnode.rgb.red.set_duty(1000) } else { rgbnode.rgb.red.set_duty(1) }
+            next_mil += 1000;
+            //hprintln!("{}", mil);
+        }
+    }
+    */
 }
 
