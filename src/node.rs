@@ -83,7 +83,6 @@ fn command_index(rgbnode: &mut RgbNode, args: &[&str]) {
 fn command_channel(rgbnode: &mut RgbNode, args: &[&str]) {
     if let Ok(ch) = lexical_core::parse::<u8>(args[1].as_bytes()) {
         rgbnode.change_channel(ch);
-        rgbnode.engine.force_update();
     }
 }
 
@@ -195,10 +194,11 @@ impl<'a> RgbNode<'a> {
             8 => self.engine.swirl_mode(true),
             _ => { },
         }
+        self.engine.force_update();
     }
 
     pub fn process_ir_code(&mut self, code: IrCode) {
-        //hprintln!("IR: {:#x}", code.cmd).ok();
+        hprintln!("IR: {:#x}", code.cmd).ok();
 
         match code.cmd {
 	    0x12 => {		// Power
@@ -212,6 +212,9 @@ impl<'a> RgbNode<'a> {
                 let intensity = self.engine.intensity(None);
 		self.engine.intensity(Some(intensity - (intensity >> 3) - 1));
             },
+            1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 => {
+                self.change_channel(code.cmd);
+            }
             _ => { },
         }
     }
