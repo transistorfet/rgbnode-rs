@@ -14,19 +14,23 @@ use stm32f1xx_hal::{
     stm32,
     prelude::*,
     time::U32Ext,
-    timer::{ Timer, Tim2NoRemap },
+    timer::{ Event, Timer, Tim3NoRemap },
     usb::{ Peripheral, UsbBus },
 };
 
 
+mod ir;
 mod rgb;
 mod node;
 mod serial;
 
+use ir::{ IrDevice };
 use rgb::{ Stm32Rgb };
 use node::{ RgbNode };
 use serial::{ SerialDevice, InputLine };
 
+
+//// System Timer for millisecond counting ////
 
 static mut ELAPSED_MS: u32 = 0u32;
 
@@ -39,6 +43,9 @@ fn millis() -> u32 {
     return unsafe { ELAPSED_MS };
 }
 
+
+//// Main Setup ////
+
 #[entry]
 fn main() -> ! {
     let dp = stm32::Peripherals::take().unwrap();
@@ -46,6 +53,7 @@ fn main() -> ! {
 
     let mut flash = dp.FLASH.constrain();
     let mut rcc = dp.RCC.constrain();
+    let mut afio = dp.AFIO.constrain(&mut rcc.apb2);
 
     // Configure the clocks
     let clocks = rcc
@@ -58,7 +66,7 @@ fn main() -> ! {
 
     // Configure SysTick to generate a 1ms interrupt
     let mut syst = cp.SYST;
-    syst.set_reload(48000);
+    syst.set_reload(48_000 - 1);
     syst.clear_current();
     syst.set_clock_source(SystClkSource::Core);
     syst.enable_counter();
@@ -67,6 +75,7 @@ fn main() -> ! {
 
     // Fetch the port devices we'll need
     let mut gpioa = dp.GPIOA.split(&mut rcc.apb2);
+    let mut gpiob = dp.GPIOB.split(&mut rcc.apb2);
     let mut gpioc = dp.GPIOC.split(&mut rcc.apb2);
 
 
@@ -95,19 +104,27 @@ fn main() -> ! {
     let serial = SerialDevice::new(&usb_bus);
 
 
+    // Configure IR
+    let ir_pin = gpiob.pb8.into_floating_input(&mut gpiob.crh);
+    let mut ir_timer = Timer::tim2(dp.TIM2, &clocks, &mut rcc.apb1).start_count_down(ir::SAMPLERATE.hz());
+    ir_timer.listen(Event::Update);
+
+    IrDevice::init(ir_pin, ir_timer);
+
+
     // Configure PWM
     let channels = (
-        gpioa.pa0.into_alternate_push_pull(&mut gpioa.crl),
-        gpioa.pa1.into_alternate_push_pull(&mut gpioa.crl),
-        gpioa.pa2.into_alternate_push_pull(&mut gpioa.crl),
+        gpioa.pa6.into_alternate_push_pull(&mut gpioa.crl),
+        gpioa.pa7.into_alternate_push_pull(&mut gpioa.crl),
+        gpiob.pb0.into_alternate_push_pull(&mut gpiob.crl),
     );
 
-    let mut afio = dp.AFIO.constrain(&mut rcc.apb2);
-    let pwm = Timer::tim2(dp.TIM2, &clocks, &mut rcc.apb1).pwm::<Tim2NoRemap, _, _, _>(
+    let pwm = Timer::tim3(dp.TIM3, &clocks, &mut rcc.apb1).pwm::<Tim3NoRemap, _, _, _>(
         channels,
         &mut afio.mapr,
         1.khz(),
     ).split();
+    hprintln!("DUTY: {}", pwm.0.get_max_duty()).ok();
     let rgb = Stm32Rgb::new(pwm.0, pwm.1, pwm.2);
 
 
@@ -124,6 +141,10 @@ fn mainloop(mut rgbnode: RgbNode) -> ! {
     loop {
         rgbnode.process_input(&mut input);
         rgbnode.handle_animation();
+
+        if let Some(code) = IrDevice::poll() {
+            rgbnode.process_ir_code(code);
+        }
     }
 
     /*

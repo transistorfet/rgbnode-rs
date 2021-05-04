@@ -3,21 +3,25 @@ use oorandom::Rand32;
 
 use stm32f1xx_hal::{
     prelude::*,
-    pac::{ TIM2 },
+    pac::{ TIM3 },
     pwm::{ PwmChannel, C1, C2, C3 },
 };
 
 use crate::millis;
 
+type PwmRed = PwmChannel<TIM3, C1>;
+type PwmGreen = PwmChannel<TIM3, C2>;
+type PwmBlue = PwmChannel<TIM3, C3>;
+
 pub struct Stm32Rgb {
-    pub red: PwmChannel<TIM2, C1>,
-    pub green: PwmChannel<TIM2, C2>,
-    pub blue: PwmChannel<TIM2, C3>,
+    pub red: PwmRed,
+    pub green: PwmGreen,
+    pub blue: PwmBlue,
     pub max_duty: u16,
 }
 
 impl Stm32Rgb {
-    pub fn new(mut red: PwmChannel<TIM2, C1>, mut green: PwmChannel<TIM2, C2>, mut blue: PwmChannel<TIM2, C3>) -> Self {
+    pub fn new(mut red: PwmRed, mut green: PwmGreen, mut blue: PwmBlue) -> Self {
         let max_duty = red.get_max_duty();
 
         red.set_duty(max_duty);
@@ -47,12 +51,15 @@ impl RgbDevice for Stm32Rgb {
     }
 
     fn set_colour(&mut self, col: Colour) {
-        //self.red.set_duty((col.r as u16) * (self.max_duty / 256));
-        //self.green.set_duty((col.g as u16) * (self.max_duty / 256));
-        //self.blue.set_duty((col.b as u16) * (self.max_duty / 256));
-        self.red.set_duty(((col.r as u32).pow(2) * self.max_duty as u32 / 65536) as u16);
-        self.green.set_duty(((col.g as u32).pow(2) * self.max_duty as u32 / 65536) as u16);
-        self.blue.set_duty(((col.b as u32).pow(2) * self.max_duty as u32 / 65536) as u16);
+        // Scale the values linearly
+        self.red.set_duty((col.r as u16) * (self.max_duty / 256));
+        self.green.set_duty((col.g as u16) * (self.max_duty / 256));
+        self.blue.set_duty((col.b as u16) * (self.max_duty / 256));
+
+        // Scale the values exponentially
+        //self.red.set_duty(((col.r as u32).pow(2) * self.max_duty as u32 / 65536) as u16);
+        //self.green.set_duty(((col.g as u32).pow(2) * self.max_duty as u32 / 65536) as u16);
+        //self.blue.set_duty(((col.b as u32).pow(2) * self.max_duty as u32 / 65536) as u16);
     }
 }
 
@@ -274,6 +281,10 @@ impl RgbEngine {
         self.mode = RgbMode::Strobe(random, false);
     }
 
+    pub fn force_update(&mut self) {
+        self.frame = self.get_next_frame();
+    }
+
 
     // Private State Control Functions
 
@@ -379,7 +390,7 @@ impl Colour {
 }
 
 // This is the highest colour index that will be used for cycle patterns
-const COLOUR_CYCLE_MAX: usize = 25;
+const COLOUR_CYCLE_MAX: usize = 24;
 
 const COLOUR_INDEX: &[Colour] = &[
     // NOTE these were ported from RGBNode, which doesn't adjust the PWM output for non-linearity, so the colours might not be what's expected

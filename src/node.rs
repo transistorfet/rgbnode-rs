@@ -2,6 +2,7 @@
 use lexical_core;
 use cortex_m_semihosting::{ hprintln };
 
+use crate::ir::{ IrCode };
 use crate::rgb::{ Stm32Rgb, RgbEngine };
 use crate::serial::{ SerialDevice, InputLine };
 
@@ -69,6 +70,7 @@ fn command_blue(rgbnode: &mut RgbNode, args: &[&str]) {
 fn command_delay(rgbnode: &mut RgbNode, args: &[&str]) {
     if let Ok(ms) = lexical_core::parse::<u32>(args[1].as_bytes()) {
         rgbnode.engine.delay(Some(ms));
+        rgbnode.engine.force_update();
     }
 }
 
@@ -81,6 +83,7 @@ fn command_index(rgbnode: &mut RgbNode, args: &[&str]) {
 fn command_channel(rgbnode: &mut RgbNode, args: &[&str]) {
     if let Ok(ch) = lexical_core::parse::<u8>(args[1].as_bytes()) {
         rgbnode.change_channel(ch);
+        rgbnode.engine.force_update();
     }
 }
 
@@ -190,6 +193,25 @@ impl<'a> RgbNode<'a> {
             6 => self.engine.strobe_mode(true),
             7 => self.engine.swirl_mode(false),
             8 => self.engine.swirl_mode(true),
+            _ => { },
+        }
+    }
+
+    pub fn process_ir_code(&mut self, code: IrCode) {
+        //hprintln!("IR: {:#x}", code.cmd).ok();
+
+        match code.cmd {
+	    0x12 => {		// Power
+		self.engine.toggle(&mut self.rgb);
+            },
+	    0x1a => {		// Volume Up
+                let intensity = self.engine.intensity(None);
+		self.engine.intensity(Some(intensity + (intensity >> 3) + 1));
+            },
+	    0x1e => {		// Volume Down
+                let intensity = self.engine.intensity(None);
+		self.engine.intensity(Some(intensity - (intensity >> 3) - 1));
+            },
             _ => { },
         }
     }
