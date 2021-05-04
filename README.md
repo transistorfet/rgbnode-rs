@@ -49,37 +49,37 @@ Using via Serial
 
 The following commands are recognized over serial:
 
-    power <0|1>
-	Toggle power.  If the optional argument is provided, turn on (1) or off (0)
+power <0|1>
+    Toggle power.  If the optional argument is provided, turn on (1) or off (0)
 
-    intensity [0-255]
-	Change the intensity (brightness) to the given value
+intensity [0-255]
+    Change the intensity (brightness) to the given value
 
-    index [0-30]
-	Change the colour to a preset indexed colour (the actual number will be mod the number of index colours)
+index [0-30]
+    Change the colour to a preset indexed colour (the actual number will be mod the number of index colours)
 
-    delay [0-100_000]
-	Change the delay used by animations to the given value.  For strobe, this will be the time between flashes.
-	For colour swirl, this will be the fade time, follow by twice this delay of hold time between colour changes
+delay [0-100_000]
+    Change the delay used by animations to the given value.  For strobe, this will be the time between flashes.
+    For colour swirl, this will be the fade time, follow by twice this delay of hold time between colour changes
 
-    channel [0-9]
-	Change the colour mode to use (this is mapped to the IR remote channel numbers)
+channel [0-9]
+    Change the colour mode to use (this is mapped to the IR remote channel numbers)
 
-    red [0-255]
-	Change just the red colour channel to the given value
+red [0-255]
+    Change just the red colour channel to the given value
 
-    green [0-255]
-	Change just the green colour channel to the given value
+green [0-255]
+    Change just the green colour channel to the given value
 
-    blue [0-255]
-	Change just the blue colour channel to the given value
+blue [0-255]
+    Change just the blue colour channel to the given value
 
-    indexup
-	Increment the indexed colour to use
+indexup
+    Increment the indexed colour to use
 
-    indexdown
-	Decrement the indexed colour to use
+indexdown
+    Decrement the indexed colour to use
 
-    version
-	Print the firmware version number
+version
+    Print the firmware version number
 
